@@ -45,6 +45,46 @@ Stack path: `phase-a/terraform/`.
 
 ## Networking
 
+The default is `network_mode = "private_nat"` in `us-east-1`. The worker has no public IP. It dials out through a NAT gateway. Nothing on the internet opens a connection to the worker.
+
+```mermaid
+flowchart TB
+  subgraph outside ["Outside AWS"]
+    pool["Cursor Team Pool<br/>named pool: pool_name"]
+    plane["Cursor control plane<br/>api2.cursor.sh · api2direct.cursor.sh<br/>downloads.cursor.com · cursor.com"]
+  end
+
+  subgraph useast1 ["AWS region us-east-1"]
+    secret["Secrets Manager<br/>cursor/pool_name/service-account-key"]
+
+    subgraph vpc ["VPC"]
+      subgraph pub ["Public subnet"]
+        nat["NAT Gateway + Elastic IP"]
+      end
+
+      subgraph priv ["Private subnet"]
+        subgraph workerSg ["Security group cursor-pool=pool_name<br/>dedicated to this pool, outbound only, no inbound"]
+          worker["EC2 Team Pool worker<br/>Amazon Linux 2023, no public IP<br/>agent worker --pool pool_name"]
+        end
+        vpce["Secrets Manager interface VPC endpoint<br/>private DNS, ENI in this subnet<br/>ingress TCP 443 only from the worker group"]
+      end
+    end
+  end
+
+  worker -->|"GetSecretValue TCP 443<br/>private IP, stays in the VPC"| vpce
+  vpce --> secret
+  worker -->|"private default route"| nat
+  nat -->|"HTTPS TCP 443 via NAT<br/>worker dials out; no inbound from the internet"| plane
+  plane --- pool
+  worker -.->|"joins the named Team Pool"| pool
+
+  publicLab["public_lab callout: skip the private subnet, NAT Gateway, and Elastic IP. Put the worker in the public subnet with a public IP. The same outbound-only security group still applies."]
+  nat -.->|"not created in public_lab"| publicLab
+
+  classDef callout fill:#fff8e1,stroke:#b8860b,color:#3d3208
+  class publicLab callout
+```
+
 Workers need outbound HTTPS to the hosts in the [Team Pools networking section](https://cursor.com/docs/cloud-agent/self-hosted/pool#networking):
 
 | Host | Why |
@@ -65,10 +105,10 @@ The service account key is fetched from Secrets Manager through an interface end
 
 | `network_mode` | Worker placement | Egress path |
 | --- | --- | --- |
-| `public_lab` (default) | Default VPC, a public subnet, a public IP | Internet gateway, still filtered by the security group |
-| `private_nat` | New private subnet in that VPC, no public IP | NAT gateway in the public subnet |
+| `private_nat` (default) | New private subnet in that VPC, no public IP | NAT gateway in the public subnet |
+| `public_lab` | Default VPC, a public subnet, a public IP | Internet gateway, still filtered by the security group |
 
-`public_lab` is the cheap dry-run. `private_nat` bills a NAT gateway and an Elastic IP for as long as the stack exists. Both modes use the default VPC unless you set `vpc_id`. The private subnet CIDR defaults to a `/24` near the top of the VPC range (`cidrsubnet(vpc, 8, 250)`); set `private_subnet_cidr` if that range is taken.
+`private_nat` is the default and the recommended path for an enterprise-shaped dry-run. It bills a NAT gateway and an Elastic IP for as long as the stack exists. `public_lab` stays available when you want to skip that NAT cost on a throwaway lab. Both modes use the default VPC unless you set `vpc_id`. The private subnet CIDR defaults to a `/24` near the top of the VPC range (`cidrsubnet(vpc, 8, 250)`); set `private_subnet_cidr` if that range is taken.
 
 `private_dns_enabled` on the Secrets Manager endpoint fails if the VPC already has an endpoint for that service. Point `vpc_id` at a lab VPC, or remove the existing endpoint before apply.
 

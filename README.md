@@ -16,19 +16,27 @@ Both are [Self-Hosted Machines](https://cursor.com/docs/cloud-agent/self-hosted)
 
 | Phase | Path | Status | What it covers |
 | --- | --- | --- | --- |
-| A | [phase-a/](phase-a/README.md) | Apply-ready | One AL2023 EC2 worker, Secrets Manager for the service account key, security group tagged `cursor-pool`, strict egress to Cursor A records captured at apply time |
+| A | [phase-a/](phase-a/README.md) | Apply-ready | One AL2023 EC2 worker in a private subnet with NAT (`private_nat`, the enterprise-shaped dry-run default). `public_lab` is optional to skip NAT cost. Secrets Manager for the service account key, security group tagged `cursor-pool`, strict egress to Cursor A records captured at apply time |
 | B | [phase-b/](phase-b/README.md) | Stub | Worker controller and per-claim session tokens, so the service account key stays off the worker |
 | C | [phase-c/](phase-c/README.md) | Stub | Placeholder for scaling, a custom AMI, or tighter networking |
 
-Start with the [Phase A operator path](phase-a/README.md).
+Start with the [Phase A operator path](phase-a/README.md). The enterprise-shaped default is a private subnet plus NAT in `us-east-1`. `public_lab` is optional and skips that NAT cost by placing the worker in a public subnet. The [Phase A README](phase-a/README.md) has the full diagram.
 
 ```mermaid
 flowchart LR
-  admin[Team admin] --> allow[Allow Self-Hosted Machines]
-  allow --> pool[Team Pool]
-  worker[Phase A AL2023 worker] -->|claims chats| pool
-  worker -->|HTTPS to apply-time A records| cursor[Cursor hosts]
-  worker -->|GetSecretValue| sm[Secrets Manager]
+  subgraph aws ["AWS us-east-1 VPC"]
+    subgraph pub ["Public subnet"]
+      nat["NAT Gateway + Elastic IP"]
+    end
+    subgraph priv ["Private subnet"]
+      worker["EC2 Team Pool worker<br/>SG cursor-pool=pool_name<br/>outbound only"]
+      vpce["Secrets Manager<br/>interface endpoint"]
+    end
+  end
+  pool["Cursor Team Pool<br/>control plane, outside AWS"]
+  worker -->|"GetSecretValue :443"| vpce
+  worker -->|"HTTPS via NAT"| nat
+  nat -->|"workers dial out<br/>no inbound from the internet"| pool
 ```
 
 ## Secrets

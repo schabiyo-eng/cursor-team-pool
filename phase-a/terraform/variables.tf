@@ -16,9 +16,9 @@ variable "pool_name" {
 }
 
 variable "network_mode" {
-  description = "public_lab places the worker in the default VPC public subnet with a public IP. private_nat places it in a new private subnet and sends egress through a NAT gateway in that VPC."
+  description = "private_nat (recommended enterprise default) places the worker in a new private subnet and sends egress through a NAT gateway in that VPC. public_lab is the cheap throwaway lab option: the worker sits in a public subnet with a public IP."
   type        = string
-  default     = "public_lab"
+  default     = "private_nat"
 
   validation {
     condition     = contains(["public_lab", "private_nat"], var.network_mode)
