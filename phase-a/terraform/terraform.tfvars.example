@@ -1,7 +1,9 @@
 # Copy to terraform.tfvars. Do not put a service account key in this file.
 aws_region   = "us-east-1"
 pool_name    = "lab"
-network_mode = "public_lab" # public_lab | private_nat
+# private_nat is the default and the recommended enterprise path.
+# public_lab skips the NAT gateway cost and is lab-only.
+network_mode = "private_nat" # private_nat (default) | public_lab (lab-only)
 lab_egress   = false
 
 # instance_type    = "t3.small"
