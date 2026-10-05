@@ -31,15 +31,15 @@ resource "aws_security_group" "worker" {
     cidr_blocks = [local.dns_resolver_cidr, local.amazon_dns_linklocal]
   }
 
-  dynamic "egress" {
-    for_each = local.secretsmanager_cidrs
-    content {
-      description = "Secrets Manager interface endpoint"
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      cidr_blocks = [egress.value]
-    }
+  # SG-to-SG. A for_each over the endpoint ENI ids fails plan because those
+  # ids are known only after apply. This matches ENIs in the endpoint group,
+  # which is tighter than the worker subnet CIDR (a shared subnet in public_lab).
+  egress {
+    description     = "Secrets Manager interface endpoint"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.secretsmanager_endpoint.id]
   }
 
   dynamic "egress" {
