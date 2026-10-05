@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars. Do not put a service account key in this file.
+aws_region   = "us-east-1"
+pool_name    = "lab"
+network_mode = "public_lab" # public_lab | private_nat
+lab_egress   = false
+
+# instance_type    = "t3.small"
+# ami_architecture = "x86_64"
+# vpc_id           = null
+# public_subnet_id = null
+# secret_recovery_window_in_days = 0

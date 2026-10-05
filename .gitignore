@@ -1,0 +1,23 @@
+# Terraform local state and provider cache. State can contain resource IDs.
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl.bak
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Operator copies of examples. Never commit a filled-in tfvars file.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Local scratch for the service account key. Not a Terraform input.
+service-account-key.txt
+*.pem
+*.key
+.env
+.env.*
