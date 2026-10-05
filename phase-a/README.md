@@ -45,13 +45,15 @@ Stack path: `phase-a/terraform/`.
 
 ## Networking
 
-The default is `network_mode = "private_nat"` in `us-east-1`. The worker has no public IP. It dials out through a NAT gateway. Nothing on the internet opens a connection to the worker.
+The default is `network_mode = "private_nat"` in `us-east-1`. The worker has no public IP. It dials out through a NAT gateway to Cursor's session hosts, CLI hosts, and Cursor-owned artifact bucket. GetSecretValue stays on the Secrets Manager interface endpoint and does not use the NAT gateway. Nothing on the internet opens a connection to the worker.
 
 ```mermaid
 flowchart TB
-  subgraph outside ["Outside AWS"]
+  subgraph outside ["Outside AWS — worker dials out; nothing dials in"]
     pool["Cursor Team Pool<br/>named pool: pool_name"]
-    plane["Cursor control plane<br/>api2.cursor.sh · api2direct.cursor.sh<br/>downloads.cursor.com · cursor.com"]
+    session["api2.cursor.sh / api2direct.cursor.sh<br/>session"]
+    cli["downloads.cursor.com / cursor.com<br/>CLI"]
+    artifacts["cloud-agent-artifacts.s3.us-east-1.amazonaws.com<br/>Cursor-owned artifact S3<br/>not a customer bucket"]
   end
 
   subgraph useast1 ["AWS region us-east-1"]
@@ -71,11 +73,12 @@ flowchart TB
     end
   end
 
-  worker -->|"GetSecretValue TCP 443<br/>private IP, stays in the VPC"| vpce
+  worker -->|"GetSecretValue TCP 443<br/>private path, not via NAT"| vpce
   vpce --> secret
   worker -->|"private default route"| nat
-  nat -->|"HTTPS TCP 443 via NAT<br/>worker dials out; no inbound from the internet"| plane
-  plane --- pool
+  nat -->|"HTTPS TCP 443"| session
+  nat -->|"HTTPS TCP 443"| cli
+  nat -->|"HTTPS TCP 443"| artifacts
   worker -.->|"joins the named Team Pool"| pool
 
   publicLab["public_lab callout: skip the private subnet, NAT Gateway, and Elastic IP. Put the worker in the public subnet with a public IP. The same outbound-only security group still applies."]
