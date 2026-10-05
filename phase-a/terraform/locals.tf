@@ -17,7 +17,6 @@ locals {
   secret_name          = coalesce(var.secret_name, "cursor/${var.pool_name}/service-account-key")
   dns_resolver_cidr    = "${cidrhost(local.vpc_cidr, 2)}/32"
   amazon_dns_linklocal = "169.254.169.253/32"
-  secretsmanager_cidrs = [for eni in data.aws_network_interface.secretsmanager : "${eni.private_ip}/32"]
 
   cursor_ipv4 = toset(flatten([
     for record in data.dns_a_record_set.cursor : record.addrs

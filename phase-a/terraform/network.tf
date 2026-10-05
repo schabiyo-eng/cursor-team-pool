@@ -82,8 +82,10 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[0].id
 }
 
-# Interface endpoint so GetSecretValue stays on the VPC CIDR and the worker
+# Interface endpoint so GetSecretValue stays on the VPC network and the worker
 # security group does not need a public path to secretsmanager.*.amazonaws.com.
+# Worker egress references this security group. The endpoint ENI ids and
+# private IPs are only known after apply, so they cannot be for_each keys.
 resource "aws_security_group" "secretsmanager_endpoint" {
   name_prefix = "${var.pool_name}-sm-vpce-"
   description = "Secrets Manager interface endpoint for the Phase A worker."
@@ -120,9 +122,4 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   tags = {
     Name = "${var.pool_name}-secretsmanager"
   }
-}
-
-data "aws_network_interface" "secretsmanager" {
-  for_each = toset(aws_vpc_endpoint.secretsmanager.network_interface_ids)
-  id       = each.value
 }

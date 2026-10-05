@@ -68,7 +68,7 @@ flowchart TB
         subgraph workerSg ["Security group cursor-pool=pool_name<br/>dedicated to this pool, outbound only, no inbound"]
           worker["EC2 Team Pool worker<br/>Amazon Linux 2023, no public IP<br/>agent worker --pool pool_name"]
         end
-        vpce["Secrets Manager interface VPC endpoint<br/>private DNS, ENI in this subnet<br/>ingress TCP 443 only from the worker group"]
+        vpce["Secrets Manager interface VPC endpoint<br/>private DNS, ENI in this subnet<br/>worker egress TCP 443 to this security group<br/>ingress TCP 443 only from the worker group"]
       end
     end
   end
@@ -102,7 +102,9 @@ There is no inbound rule. The instance uses IMDSv2.
 
 Those A records are a snapshot. If Cursor or the artifact bucket moves addresses, the strict worker cannot connect until you apply again. `lab_egress = true` also allows TCP 80 and 443 to `0.0.0.0/0` (git hosts, package registries, public SSM). The A-record rules stay in place either way.
 
-The service account key is fetched from Secrets Manager through an interface endpoint in the worker subnet, with private DNS. The worker security group allows TCP 443 only to that endpoint's private IP, plus the Cursor addresses above. The endpoint's security group accepts 443 only from the worker group. A customer-managed KMS key on the secret needs `kms:Decrypt` added to the instance role; the AWS-managed `aws/secretsmanager` key does not.
+The service account key is fetched from Secrets Manager through an interface endpoint in the worker subnet, with private DNS. The worker security group allows TCP 443 to the endpoint security group, plus the Cursor addresses above. The endpoint security group accepts 443 only from the worker group. Security groups are stateful, so return traffic is allowed.
+
+The worker rule references the endpoint security group so a single plan and apply can succeed. The endpoint ENI ids and private IPs are created with the endpoint, and Terraform rejects `for_each` over values that are known only after apply (`Invalid for_each argument`). A security-group id is a normal reference, so it does not need a targeted apply, and it still limits TCP 443 to ENIs attached to that group. The worker subnet CIDR is also known at plan time. It is a wider allowance: `private_nat` uses a dedicated subnet, while `public_lab` places the worker in a shared public subnet. A customer-managed KMS key on the secret needs `kms:Decrypt` added to the instance role; the AWS-managed `aws/secretsmanager` key does not.
 
 ### public_lab and private_nat
 
