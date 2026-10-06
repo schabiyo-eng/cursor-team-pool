@@ -11,4 +11,5 @@ provider "aws" {
   }
 }
 
+# Only consulted when brittle_cursor_ip_egress is true.
 provider "dns" {}

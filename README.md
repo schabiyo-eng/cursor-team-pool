@@ -16,11 +16,11 @@ Both are [Self-Hosted Machines](https://cursor.com/docs/cloud-agent/self-hosted)
 
 | Phase | Path | Status | What it covers |
 | --- | --- | --- | --- |
-| A | [phase-a/](phase-a/README.md) | Apply-ready | One AL2023 EC2 worker in a private subnet with NAT (`private_nat`, the enterprise-shaped dry-run default). `public_lab` is optional to skip NAT cost. Secrets Manager for the service account key, security group tagged `cursor-pool`, strict egress to Cursor A records captured at apply time |
+| A | [phase-a/](phase-a/README.md) | Apply-ready | One AL2023 EC2 worker in a private subnet with NAT (`private_nat`, the enterprise-shaped dry-run default). `public_lab` is optional to skip NAT cost. Secrets Manager for the service account key, security group tagged `cursor-pool`, TCP 443 to the internet. Domain allowlists belong on a firewall or proxy, not on apply-time A records. |
 | B | [phase-b/](phase-b/README.md) | Stub | Worker controller and per-claim session tokens, so the service account key stays off the worker |
 | C | [phase-c/](phase-c/README.md) | Stub | Placeholder for scaling, a custom AMI, or tighter networking |
 
-Start with the [Phase A operator path](phase-a/README.md). The enterprise-shaped default is a private subnet plus NAT in `us-east-1`. NAT carries HTTPS to the session hosts, the CLI hosts, and Cursor's artifact bucket. Secrets Manager stays on the interface endpoint. `public_lab` is optional and skips that NAT cost by placing the worker in a public subnet. The [Phase A README](phase-a/README.md) has the full diagram.
+Start with the [Phase A operator path](phase-a/README.md). The enterprise-shaped default is a private subnet plus NAT in `us-east-1`. NAT carries HTTPS to the session hosts, the CLI hosts, and Cursor's artifact bucket. The worker security group allows TCP 443 to the internet because those CDN addresses rotate; filter domains with Network Firewall or a proxy, not with security group IP lists. Secrets Manager stays on the interface endpoint. `public_lab` is optional and skips that NAT cost by placing the worker in a public subnet. The [Phase A README](phase-a/README.md) has the full diagram.
 
 ```mermaid
 flowchart LR
@@ -42,7 +42,7 @@ flowchart LR
   end
 
   worker -->|"GetSecretValue :443"| vpce
-  worker -->|"HTTPS via NAT"| nat
+  worker -->|"HTTPS via NAT<br/>TCP 443 to 0.0.0.0/0"| nat
   nat -->|"HTTPS :443"| session
   nat -->|"HTTPS :443"| cli
   nat -->|"HTTPS :443"| artifacts

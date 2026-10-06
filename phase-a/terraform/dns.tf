@@ -1,7 +1,7 @@
-# A records are resolved when the plan is applied, then pinned as /32 egress
-# rules. Re-apply when those addresses change; otherwise a strict worker loses
-# the path to Cursor. lab_egress=true adds a wide 80/443 rule beside these.
+# Used only when brittle_cursor_ip_egress is true. Leave that variable false.
+# These A records are a snapshot: cursor.com and downloads.cursor.com rotate,
+# and a worker pinned to the old addresses cannot finish bootstrap.
 data "dns_a_record_set" "cursor" {
-  for_each = toset(var.cursor_hosts)
+  for_each = var.brittle_cursor_ip_egress ? toset(var.cursor_hosts) : toset([])
   host     = each.value
 }

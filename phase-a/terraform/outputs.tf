@@ -29,7 +29,7 @@ output "secret_name" {
 }
 
 output "cursor_egress_cidrs" {
-  description = "IPv4 /32 CIDRs allowed to Cursor hosts, resolved at apply time."
+  description = "Brittle apply-time IPv4 /32 CIDRs. Empty unless brittle_cursor_ip_egress is true. Do not use this list as a domain filter."
   value       = [for ip in sort(tolist(local.cursor_ipv4)) : "${ip}/32"]
 }
 

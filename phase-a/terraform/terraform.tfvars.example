@@ -5,6 +5,8 @@ pool_name    = "lab"
 # public_lab skips the NAT gateway cost and is lab-only.
 network_mode = "private_nat" # private_nat (default) | public_lab (lab-only)
 lab_egress   = false
+# enable_ssm                 = false
+# brittle_cursor_ip_egress   = false # leave false; CDN A records rotate
 
 # instance_type    = "t3.small"
 # ami_architecture = "x86_64"

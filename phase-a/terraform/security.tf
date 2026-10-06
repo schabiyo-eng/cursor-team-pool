@@ -1,6 +1,11 @@
 # Inline egress so Terraform drops the VPC default allow-all rule.
 # The group is tagged cursor-pool=<pool_name> so operators can find every
 # worker group that belongs to the pool.
+#
+# TCP 443 to 0.0.0.0/0 is intentional. cursor.com and downloads.cursor.com are
+# CDN-hosted and their A records rotate, so an apply-time /32 list breaks the
+# bootstrap curl. Match domains on the NAT path (Network Firewall or a proxy),
+# not in this security group. Port 80 stays closed unless lab_egress is set.
 resource "aws_security_group" "worker" {
   name_prefix = "${var.pool_name}-worker-"
   description = "Phase A Team Pool worker. Outbound only. No inbound."
@@ -45,7 +50,7 @@ resource "aws_security_group" "worker" {
   dynamic "egress" {
     for_each = local.cursor_ipv4
     content {
-      description = "Cursor host A record at apply time"
+      description = "Brittle Cursor A record snapshotted at apply time"
       from_port   = 443
       to_port     = 443
       protocol    = "tcp"
@@ -54,11 +59,22 @@ resource "aws_security_group" "worker" {
   }
 
   dynamic "egress" {
-    for_each = var.lab_egress ? [443, 80] : []
+    for_each = local.allow_wide_https ? [1] : []
     content {
-      description = "Optional lab egress"
-      from_port   = egress.value
-      to_port     = egress.value
+      description = "HTTPS to the internet. Filter Cursor domains on Network Firewall or a proxy, not with security group IPs."
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+
+  dynamic "egress" {
+    for_each = var.lab_egress ? [1] : []
+    content {
+      description = "Optional lab HTTP egress"
+      from_port   = 80
+      to_port     = 80
       protocol    = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }

@@ -28,6 +28,13 @@ resource "aws_iam_role_policy" "worker" {
   policy = data.aws_iam_policy_document.worker.json
 }
 
+resource "aws_iam_role_policy_attachment" "ssm" {
+  count = var.enable_ssm ? 1 : 0
+
+  role       = aws_iam_role.worker.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "worker" {
   name_prefix = "${var.pool_name}-worker-"
   role        = aws_iam_role.worker.name
