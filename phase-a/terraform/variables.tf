@@ -48,7 +48,19 @@ variable "private_subnet_cidr" {
 }
 
 variable "lab_egress" {
-  description = "When true, also allow outbound TCP 80 and 443 to 0.0.0.0/0 so the worker can reach git hosts, package registries, and SSM public endpoints. Strict Cursor A-record rules remain either way."
+  description = "When true, allow outbound TCP 80 and TCP 443 to 0.0.0.0/0. Port 80 stays closed when this is false. private_nat already allows TCP 443 to 0.0.0.0/0 unless brittle_cursor_ip_egress is true. Use this for git hosts and package registries that are not HTTPS, and for public_lab when you still want wide HTTPS while the brittle IP snapshot is on."
+  type        = bool
+  default     = false
+}
+
+variable "brittle_cursor_ip_egress" {
+  description = "Brittle opt-in, off by default. When true, resolve cursor_hosts A records at apply time and allow TCP 443 only to those /32s instead of 0.0.0.0/0. cursor.com and downloads.cursor.com are CDN-hosted and those addresses rotate, so the bootstrap curl to cursor.com:443 times out until the next apply. Leave this false. Filter domains on the NAT or egress layer (AWS Network Firewall domain allowlist, or a proxy), not with security group IP lists."
+  type        = bool
+  default     = false
+}
+
+variable "enable_ssm" {
+  description = "When true, attach AmazonSSMManagedInstanceCore to the worker role so Session Manager can open a shell. Default false. In private_nat mode, SSM uses the NAT because TCP 443 is open; SSM interface endpoints are optional and are not created by this stack."
   type        = bool
   default     = false
 }
@@ -101,7 +113,7 @@ variable "secret_recovery_window_in_days" {
 }
 
 variable "cursor_hosts" {
-  description = "Hosts whose A records are snapshotted at apply time and allowed on TCP 443. Includes the CLI install host, the agent session hosts, and the artifact bucket."
+  description = "Hosts resolved only when brittle_cursor_ip_egress is true. Unused when that variable is false. CDN names in this list rotate; do not use the snapshot as a domain filter."
   type        = list(string)
   default = [
     "cursor.com",

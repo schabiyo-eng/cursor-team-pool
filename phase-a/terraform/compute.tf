@@ -36,6 +36,7 @@ resource "aws_instance" "worker" {
 
   depends_on = [
     aws_iam_role_policy.worker,
+    aws_iam_role_policy_attachment.ssm,
     aws_vpc_endpoint.secretsmanager,
     aws_route_table_association.private,
   ]
