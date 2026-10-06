@@ -39,6 +39,23 @@ fi
 install -d -o cursor-worker -g cursor-worker -m 0750 /var/lib/cursor-worker
 install -d -o cursor-worker -g cursor-worker -m 0750 /var/lib/cursor-worker/work
 
+# git has to be on PATH before the agent CLI. --clone-git-repos clones on claim.
+git_installed=0
+for attempt in 1 2 3 4 5; do
+  if dnf install -y git 2>&1 | tee -a "$LOG" >(cat >>/dev/console || true); then
+    git_installed=1
+    break
+  fi
+  log "dnf install -y git failed (attempt $${attempt}/5); retrying in 2s"
+  sleep 2
+done
+if [[ "$git_installed" != "1" ]] || ! command -v git >/dev/null 2>&1; then
+  BOOTSTRAP_FAILING=1
+  log "BOOTSTRAP FAILED: dnf install -y git failed after 5 attempts, or git is not on PATH. --clone-git-repos needs git. Check egress to the Amazon Linux repositories (TCP 443)."
+  exit 1
+fi
+log "git on PATH: $(command -v git) ($(git --version))"
+
 if [[ ! -x /var/lib/cursor-worker/.local/bin/agent ]]; then
   # tee keeps curl's "Failed to connect" line in the log and on the serial console.
   # A console write failure must not hide a successful install.
@@ -80,7 +97,8 @@ unset secret
 exec /var/lib/cursor-worker/.local/bin/agent worker \
   --pool "$CURSOR_POOL_NAME" \
   --worker-dir /var/lib/cursor-worker/work \
-  --idle-release-timeout "$CURSOR_POOL_IDLE_TIMEOUT" \
+  --idle-release-timeout "$CURSOR_POOL_IDLE_TIMEOUT"%{ if clone_git_repos } \
+  --clone-git-repos%{ endif } \
   start
 EOF
 chmod 755 /usr/local/bin/cursor-pool-worker

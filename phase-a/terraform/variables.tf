@@ -94,6 +94,12 @@ variable "idle_release_timeout_seconds" {
   default     = 600
 }
 
+variable "clone_git_repos" {
+  description = "When true, user-data adds --clone-git-repos to the agent worker exec line, before start. Valid only for a named any-repo pool: a --pool name other than default, with no bound repository and no machine --name. The pool name default is not an any-repo pool, and this stack already rejects pool_name = \"default\". The flag implies --mint-github-token, so a team admin must enable GitHub token minting for Team Pool workers, git must be on PATH, and remotes must be HTTPS on GitHub."
+  type        = bool
+  default     = true
+}
+
 variable "secret_name" {
   description = "Secrets Manager name for the empty service-account-key container. The key value is never a Terraform input."
   type        = string

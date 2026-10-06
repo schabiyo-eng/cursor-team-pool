@@ -12,10 +12,11 @@ resource "aws_instance" "worker" {
   user_data_replace_on_change = true
 
   user_data = templatefile("${path.module}/templates/user_data.sh.tpl", {
-    aws_region   = var.aws_region
-    secret_id    = aws_secretsmanager_secret.service_account_key.arn
-    pool_name    = var.pool_name
-    idle_timeout = var.idle_release_timeout_seconds
+    aws_region      = var.aws_region
+    secret_id       = aws_secretsmanager_secret.service_account_key.arn
+    pool_name       = var.pool_name
+    idle_timeout    = var.idle_release_timeout_seconds
+    clone_git_repos = var.clone_git_repos
   })
 
   metadata_options {
