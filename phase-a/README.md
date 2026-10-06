@@ -13,7 +13,7 @@ Stack path: `phase-a/terraform/`.
    cp terraform.tfvars.example terraform.tfvars
    ```
 
-   Set `aws_region`, `pool_name`, `network_mode`, and `lab_egress`. Leave `brittle_cursor_ip_egress` false. Set `enable_ssm` only if you need a Session Manager shell. Do not add the API key.
+   Set `aws_region`, `pool_name`, `network_mode`, and `lab_egress`. Leave `brittle_cursor_ip_egress` false. Leave `clone_git_repos` at its default `true` unless your own scripts handle source control. Set `enable_ssm` only if you need a Session Manager shell. Do not add the API key.
 3. **apply.**
 
    ```bash
@@ -49,7 +49,7 @@ Stack path: `phase-a/terraform/`.
    rm -f service-account-key.txt
    ```
 
-   `terraform output put_secret_value_command` prints the `put-secret-value` command for your region and secret ARN. The worker start script strips surrounding whitespace and newlines before it exports `CURSOR_API_KEY`, then runs `agent worker --pool <pool_name> start`. The unit retries `GetSecretValue` until the value exists.
+   `terraform output put_secret_value_command` prints the `put-secret-value` command for your region and secret ARN. The worker start script strips surrounding whitespace and newlines before it exports `CURSOR_API_KEY`, then runs `agent worker --pool <pool_name> --clone-git-repos start` when `clone_git_repos` is true (the default). Worker options stay before `start`. The unit retries `GetSecretValue` until the value exists.
 5. **verify.** In Cursor, open [cursor.com/agents](https://cursor.com/agents), choose **Any repo**, and open the pool named by `pool_name`. A connected worker shows up there. There is no inbound SSH. Session Manager is off unless `enable_ssm = true`. With that set, `private_nat` reaches the SSM APIs through the NAT because TCP 443 is open. SSM interface endpoints are optional and are not created here. See [Troubleshooting](#troubleshooting) if the pool never appears.
 6. **destroy.**
 
@@ -152,9 +152,32 @@ aws ec2 describe-security-groups \
   --query 'SecurityGroups[].GroupId'
 ```
 
-Phase A starts one any-repo worker with `--worker-dir` and no `--name`, so a later change can add `--clone-git-repos`. That flag needs git on the image, GitHub token minting enabled by a team admin, and HTTPS to `github.com`. `private_nat` already allows TCP 443, so an HTTPS clone does not need `lab_egress`. It cannot be combined with a machine `--name` or the pool name `default`. This stack rejects `pool_name = "default"`.
+Phase A starts one any-repo worker with `--worker-dir` and no `--name`. `clone_git_repos` (default true) adds `--clone-git-repos` before `start`. See [Repositories / cloning](#repositories--cloning). This stack rejects `pool_name = "default"`.
 
-With `brittle_cursor_ip_egress = true` and `lab_egress = false`, the security group does not open `github.com`. The worker can register and wait for a claim. A claim that must clone will fail until you add that host to `cursor_hosts` and apply again, or turn the snapshot off.
+## Repositories / cloning
+
+A repo-backed pool is tied to one or more repositories. Requests carry a `repo=` label, match workers serving that repository, and show up under the repository in the dashboard.
+
+An any-repo pool matches on the pool name alone and shows up under **Any repo** on [cursor.com/agents](https://cursor.com/agents). Phase A starts that worker. `pool_name` is a name other than `default`, the start line passes no `--name` (no bound machine), and `--worker-dir` is `/var/lib/cursor-worker/work`, which user-data creates empty. There is no bound repository. Without `--clone-git-repos`, the worker never clones, and every session sees that empty directory.
+
+`clone_git_repos` defaults to true. User-data runs `dnf install -y git` (five attempts, then `BOOTSTRAP FAILED` if git is still missing) before it installs the agent CLI. The generated `/usr/local/bin/cursor-pool-worker` places `--clone-git-repos` before `start`:
+
+```bash
+agent worker \
+  --pool "$CURSOR_POOL_NAME" \
+  --worker-dir /var/lib/cursor-worker/work \
+  --idle-release-timeout "$CURSOR_POOL_IDLE_TIMEOUT" \
+  --clone-git-repos \
+  start
+```
+
+`--clone-git-repos` is valid only on a named any-repo pool: a `--pool` name other than `default`, with no bound repository and no machine `--name`. The CLI exits on the pool name `default`, a bound-repo worker, a named machine, or a personal My Machines worker. This stack rejects `pool_name = "default"`. Set `clone_git_repos = false` when your own scripts handle source control.
+
+On each claim the worker clones the request's repositories into the worker directory. `--clone-git-repos` implies `--mint-github-token`. Clone and fetch use a short-lived GitHub token minted for the user who started the run, so that user needs GitHub access to the repository. Remotes have to be HTTPS on GitHub, and `git` has to be on `PATH`. A failed clone keeps the request queued. On release, the worker deletes the repositories it cloned for that claim.
+
+A team admin enables GitHub token minting for Team Pool workers before a clone can succeed. Open Dashboard → Cloud Agents → Self-Hosted. The exact label may differ.
+
+Pick this pool under **Any repo** on [cursor.com/agents](https://cursor.com/agents). `private_nat` already allows TCP 443, so an HTTPS clone of `github.com` does not need `lab_egress`. With `brittle_cursor_ip_egress = true` and `lab_egress = false`, the security group does not open `github.com`. The worker can register and wait for a claim. A claim that must clone fails until you add that host to `cursor_hosts` and apply again, or turn the snapshot off.
 
 ## What apply creates
 
@@ -236,3 +259,36 @@ The secret has to be a team service-account key (Dashboard, then Settings, then 
 ### Where the pool shows up
 
 Open [cursor.com/agents](https://cursor.com/agents), choose **Any repo**, and select the pool named by `pool_name`. The connected worker is listed on that pool. Phase A does not pass `--name`, so the worker is an any-repo worker under that pool rather than a row under a single repository.
+
+### The repository is not configured / empty work dir
+
+`/var/lib/cursor-worker/work` starts empty. The worker clones into it on claim only when the start line includes `--clone-git-repos`. With `clone_git_repos = false`, or a boot from before that flag, every session sees the empty directory and the agent reports that the repository is not configured. Leave `clone_git_repos` at `true` and apply. `user_data_replace_on_change` replaces the instance. Then confirm `/usr/local/bin/cursor-pool-worker` has `--clone-git-repos` before `start`.
+
+Preflight on the instance (`enable_ssm = true`):
+
+```bash
+command -v git
+agent worker --pool <name> --worker-dir <dir> debug --json
+```
+
+`command -v git` has to print a path (`/usr/bin/git` after `dnf install -y git`). Put worker options before `debug`. On this image the CLI lives under the worker home and is not on the login `PATH`. Run the same preflight as `cursor-worker`:
+
+```bash
+command -v git
+sudo -u cursor-worker env HOME=/var/lib/cursor-worker \
+  /var/lib/cursor-worker/.local/bin/agent worker \
+  --pool <name> \
+  --worker-dir <dir> \
+  debug --json
+```
+
+For this stack, `<name>` is `pool_name` and `<dir>` is `/var/lib/cursor-worker/work`. `debug --json` checks the worker before it joins the pool.
+
+### Agent stuck queued after enabling clone (token minting off or no repo access)
+
+With `--clone-git-repos` enabled, a failed clone keeps the request queued. The worker records a generic clone failure, and the agent stays queued. Check both of these:
+
+- GitHub token minting for Team Pool workers is off. A team admin turns it on under Dashboard → Cloud Agents → Self-Hosted. The exact label may differ. `--clone-git-repos` implies `--mint-github-token`, and the CLI will not clone until that setting is on.
+- The user who started the run has no GitHub access to the repository. The short-lived token is minted for that user. Remotes have to be HTTPS on GitHub.
+
+On the instance, run `command -v git` and `agent worker --pool <name> --worker-dir <dir> debug --json` as in the previous section. Also confirm outbound HTTPS to `github.com`. `private_nat` allows TCP 443. With `brittle_cursor_ip_egress = true` and `lab_egress = false`, add `github.com` to `cursor_hosts` and apply again, or turn the snapshot off.
